@@ -941,9 +941,7 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
 
     // 控件回显
     // 默认字体项按系统自动显示（macOS→苹方，Windows→微软雅黑）
-    $('font-default-opt').textContent =
-      (navigator.platform.indexOf('Mac') > -1 || navigator.userAgent.indexOf('Mac') > -1)
-        ? '苹方 (macOS 默认)' : '微软雅黑 (Windows 默认)';
+    $('font-default-opt').textContent = isMac ? '苹方 (macOS 默认)' : '微软雅黑 (Windows 默认)';
     $('font-family').value = s.font_family;
     $('font-size').value = s.font_size;
     $('line-height').value = s.line_height;
@@ -2350,8 +2348,10 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
       if ($('encode-mask').classList.contains('open')) return;
       var _t = e.target;
       var _inF = _t && (_t.tagName === 'INPUT' || _t.tagName === 'TEXTAREA' || _t.tagName === 'SELECT' || _t.isContentEditable);
-      if (!_inF && (e.key === 'o' || e.key === 'O')) { $('settings-mask').classList.toggle('open'); return; }
-      if (!_inF && (e.key === 'c' || e.key === 'C')) { if ($('sidebar').classList.toggle('open')) focusTocCurrent(); return; }
+      // 排除 Ctrl/Cmd/Alt 组合键：Ctrl+C 是复制、Ctrl+O 是浏览器「打开文件」，不能被单字键截胡
+      var _mod = e.ctrlKey || e.metaKey || e.altKey;
+      if (!_mod && !_inF && (e.key === 'o' || e.key === 'O')) { $('settings-mask').classList.toggle('open'); return; }
+      if (!_mod && !_inF && (e.key === 'c' || e.key === 'C')) { if ($('sidebar').classList.toggle('open')) focusTocCurrent(); return; }
       if ($('settings-mask').classList.contains('open')) return;
       if (e.key === 'ArrowLeft') { if (curIdx > 0) scrollToChapter(curIdx - 1); }
       else if (e.key === 'ArrowRight') { if (book && curIdx < book.chapters.length - 1) scrollToChapter(curIdx + 1); }
