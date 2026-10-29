@@ -1,0 +1,6 @@
+# macOS 系统文件
+.DS_Store
+
+# 备份目录与备份文件
+bak/
+*.bak
