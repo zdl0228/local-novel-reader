@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>本地小说阅读器</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20100%20100%27%3E%3Ctext%20y%3D%27.9em%27%20font-size%3D%2790%27%3E%F0%9F%93%96%3C%2Ftext%3E%3C%2Fsvg%3E">
 <script>
 /* ---- 内联自 libs/jszip.min.js ---- */
 /*!
@@ -160,17 +161,41 @@ var ZH_PHRASES_T={"著作": "著作", "著名": "著名", "著称": "著称", "�
    * 先清底噪再判行：控制/零宽字符最先清、全角先转半角，
    * 这样全角网址、行内夹带信息才能被后续的网址匹配和广告行判定识别到。
    */
+  // 站点/作者残留话术：整行出现即删（用较长短语，降低误删正文概率）。写简体即可，繁体变体自动生成。
+  var AD_WORDS_SIMP = ['最新章节', '手机阅读', '手机阅读网', '看书网', '追书神器', '微信公众号', '请关注公众号', '关注公众号', '投推荐票', '求推荐票', '求月票', '求订阅', '求打赏', '求收藏', '请收藏', '支持正版', '正版首发', '加入书签', '添加书签', '加书签', '求鲜花', '求票票', '求首订', '求点击', '求追读', '求投资'];
+  var SITE_RESIDUE_SIMP = [
+    '本章未完', '未完待续', '请点击下一页', '点击下一页继续', '下一页继续阅读', '请收藏本站',
+    '请记住本书', '本书首发于', '由笔趣阁', '手打更新', '作者有话说', '作品相关',
+    '无弹窗', '首发域名', '推荐阅读', '更多好书', '本章字数'
+  ];
+  // 繁体书里广告词是繁体，简体表匹配不到；借简繁转换库自动补齐繁体变体，写词只需简体
+  function zhVariants(s) {
+    var out = [s];
+    if (typeof convertText === 'function') {
+      try {
+        var tw = convertText(s, 'zh-TW');
+        if (tw && out.indexOf(tw) < 0) out.push(tw);
+        var cn = convertText(s, 'zh-CN');
+        if (cn && out.indexOf(cn) < 0) out.push(cn);
+      } catch (e) {}
+    }
+    return out;
+  }
+  function expandVariants(words) {
+    var out = [];
+    for (var i = 0; i < words.length; i++) {
+      var vs = zhVariants(words[i]);
+      for (var j = 0; j < vs.length; j++) if (out.indexOf(vs[j]) < 0) out.push(vs[j]);
+    }
+    return out;
+  }
+  var AD_WORDS = expandVariants(AD_WORDS_SIMP);
+  var SITE_RESIDUE = expandVariants(SITE_RESIDUE_SIMP);
   var AD_PATTERNS = [
     /https?:\/\/\S*/i,
     /www\.\S*/i,
     /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
-    /^[\s]*(最新章节|手机阅读|手机阅读网|看书网|追书神器|微信公众号|请关注公众号|关注公众号|投推荐票|求推荐票|求月票|求订阅|求打赏|求收藏|请收藏|支持正版|正版首发|加入书签|添加书签|加书签|求鲜花|求票票|求首订|求点击|求追读|求投资)[\s！!。.…]*$/
-  ];
-  // 站点/作者残留话术：整行出现即删（用较长短语，降低误删正文概率）
-  var SITE_RESIDUE = [
-    '本章未完', '未完待续', '请点击下一页', '点击下一页继续', '下一页继续阅读', '请收藏本站',
-    '请记住本书', '本书首发于', '由笔趣阁', '手打更新', '作者有话说', '作品相关',
-    '无弹窗', '首发域名', '推荐阅读', '更多好书', '本章字数'
+    new RegExp('^[\\s]*(?:' + AD_WORDS.join('|') + ')[\\s！!。.…]*$')
   ];
 
   function isAdLine(t) {
@@ -387,6 +412,7 @@ body.skin-auto {}
   position: relative; z-index: 30;
 }
 #topbar .logo { font-weight: 600; font-size: 15px; margin-right: 4px; white-space: nowrap; }
+#topbar .app-version { font-size: 11px; font-weight: 400; color: var(--muted); margin-left: 4px; }
 #topbar .book-meta { flex: 1; display: flex; align-items: center; gap: 12px; min-width: 0; }
 #book-title { font-size: 14px; color: var(--fg); opacity: .9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 #book-chapter, #book-progress { flex-shrink: 0; font-size: 12px; color: var(--muted); white-space: nowrap; }
@@ -413,6 +439,7 @@ body.skin-auto {}
 /* 数据管理：3 个按钮等宽均分整行，间距统一，与面板对齐 */
 #settings .row.data-actions { gap: 10px; }
 #settings .row.data-actions .btn { flex: 1 1 0; }
+#settings .app-version-line { text-align: center; font-size: 11px; color: var(--muted); margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
 
 /* ===== 布局 ===== */
 #layout { display: flex; height: calc(100% - 52px); position: relative; overflow: hidden; }
@@ -450,6 +477,11 @@ body.skin-auto {}
   margin: 10px 0 34px; padding-bottom: 16px; border-bottom: 1px solid var(--line);
 }
 #content p { margin: calc(var(--para-space, 0.5) * 0.5em) 0; text-indent: 2em; }
+#content img.chapter-img {
+  display: block; max-width: 100%; height: auto;
+  margin: 22px auto; border-radius: 6px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+}
 #empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   height: 100%; color: var(--muted); text-align: center; gap: 14px; padding: 20px;
@@ -534,6 +566,19 @@ body.dragging #content-wrap::after {
 #settings .skin-dot:hover { background: var(--dot-bg-hover); }
 #settings .skin-dot.sel { border-color: var(--accent); color: var(--dot-sel-fg); background: var(--dot-sel-bg); }
 #settings .skin-dot .sw { height: 22px; border-radius: 5px; margin-bottom: 6px; border: 1px solid var(--btn-border); font-size: 12px; font-weight: 600; }
+/* 自动皮肤：左浅右深，文字也左深右浅 */
+#settings .skin-dot .sw.sw-auto { position: relative; overflow: hidden; background: #FAF9F8; color: transparent; }
+#settings .skin-dot .sw.sw-auto::before {
+  content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 50%;
+  background: #1E1E1E;
+}
+#settings .skin-dot .sw.sw-auto .sw-auto-txt {
+  position: relative; z-index: 1;
+  display: block; width: 100%;
+  background: linear-gradient(90deg, #1D1D1F 0%, #1D1D1F 50%, #F5F5F7 50%, #F5F5F7 100%);
+  -webkit-background-clip: text; background-clip: text;
+  color: transparent; -webkit-text-fill-color: transparent;
+}
 #settings .skin-dot .nm { font-size: 11px; color: var(--muted); }
 #settings .ck-label { font-size: 13px; color: var(--fg); opacity: .9; display: flex; align-items: center; gap: 6px; cursor: pointer; flex: 1; }
 #settings .radio-label { font-size: 13px; color: var(--fg); opacity: .9; display: flex; align-items: center; gap: 4px; cursor: pointer; }
@@ -598,7 +643,7 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
 <body>
 
 <div id="topbar">
-  <span class="logo">📖 本地小说阅读器</span>
+  <span class="logo">📖 本地小说阅读器 <span class="app-version" id="app-version"></span></span>
   <span class="book-meta">
     <span id="book-title">未打开书籍</span>
     <span id="book-chapter" class="meta-item"></span>
@@ -673,15 +718,14 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
       <span class="val" id="content-width-val">1000px</span>
     </div>
     </div>
-    <div class="group-title">内容设置</div>
-    <div class="row">
-      <label class="lbl">正文优化</label>
-      <label class="ck-label"><input type="checkbox" id="purify-text"> 压缩空行、清控制/零宽字符、全角半角统一、规范标点、剔行内网址/联系方式、删广告/站点话术行、修复对话换行、首行缩进</label>
-    </div>
     <div class="group-title">阅读行为</div>
     <div class="row">
-      <label class="lbl">记忆位置</label>
-      <label class="ck-label"><input type="checkbox" id="remember-scroll"> 自动记住阅读位置</label>
+      <label class="lbl">正文优化</label>
+      <label class="ck-label" title="压缩空行、清控制/零宽字符、全角半角统一、规范标点、剔行内网址/联系方式、删广告/站点话术行、修复对话换行、首行缩进"><input type="checkbox" id="purify-text"> 规范正文：清理乱码、广告与空行</label>
+    </div>
+    <div class="row">
+      <label class="lbl">阅读进度</label>
+      <label class="ck-label"><input type="checkbox" id="remember-scroll"> 自动记住阅读进度</label>
     </div>
     <div class="row">
       <label class="lbl" title="自动滚屏速度，每秒向下滚动像素（1-100px/s）">滚动速度</label>
@@ -690,12 +734,12 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
     </div>
     <div class="group-title">数据管理</div>
     <div class="row data-actions">
-      <button class="btn" id="btn-reset-settings" title="把阅读设置恢复为出厂默认值（保留阅读进度）">恢复默认设置</button>
-      <button class="btn" id="btn-export-settings" title="把当前设置与全部阅读进度导出为 JSON 备份文件">导出设置</button>
-      <button class="btn" id="btn-import-settings" title="从之前导出的 JSON 备份文件导入并恢复设置与进度">导入设置</button>
-      <button class="btn" id="btn-export-logs" title="把阅读器的运行日志（操作/错误记录）导出为文本文件">导出日志</button>
+      <button class="btn" id="btn-reset-settings" title="把阅读设置恢复为出厂默认值（保留阅读进度）">恢复默认</button>
+      <button class="btn" id="btn-export-settings" title="把当前设置与全部阅读进度导出为 JSON 数据备份">导出数据</button>
+      <button class="btn" id="btn-import-settings" title="从之前导出的 JSON 数据备份导入并恢复设置与进度">导入数据</button>
       <input type="file" id="import-file" accept=".json,.txt" style="display:none">
     </div>
+    <div class="app-version-line" id="app-version-line"></div>
   </div>
 
 </div>
@@ -747,10 +791,10 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
 
   /* =========================================================
      本地小说阅读器 · 单文件实现（模块分区）
-     01 工具与常量      02 存储与设置   03 运行日志
-     04 解析器(TXT/EPUB/MD/HTML/ZIP)  05 编码识别/转换
-     06 渲染/目录/进度   07 自动滚屏     08 打开书/提示/导入导出
-     09 事件绑定与初始化
+     01 工具与常量      02 存储与设置
+     03 解析器(TXT/EPUB/MD/HTML/ZIP)  04 编码识别/转换
+     05 渲染/目录/进度   06 自动滚屏     07 打开书/提示/导入导出
+     08 事件绑定与初始化
      维护：直接编辑本文件，保存刷新即生效；改前先到 bak/ 备份
      ========================================================= */
 
@@ -764,106 +808,124 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
     { key: 'green', name: '护眼', css: 'skin-green2', bg: '#E8F5E9', fg: '#263238', desc: '豆沙绿·低对比柔和，长时间护眼' },
     { key: 'auto',  name: '自动', css: 'skin-auto',  bg: '#FAF9F8', fg: '#1D1D1F', desc: '跟随系统外观，在浅色/深色间自动切换' }
   ];
+  // 程序版本号：顶栏/设置面板显示，导出 JSON 同步写入（单一来源，改这一处生效）
+  var APP_VERSION = 'v1.0 build 20261028';
+
   var SKIN_CSS = { light: 'skin-light', dark: 'skin-dark', green: 'skin-green2', auto: 'skin-auto' };
 
     /* ---------- 存储（localStorage，键集中定义，改一处生效） ---------- */
-  var STORAGE_KEYS = { settings: 'mnr_local_settings', logs: 'mnr_local_logs', progressPrefix: 'mnr_local_progress_' };
+  var STORAGE_KEYS = {
+    settings: 'mnr_local_settings',
+    progressPrefix: 'mnr_local_progress_',
+    convertPrefix: 'mnr_local_convert_'
+  };
   var store = {
     get: function (k, d) { try { var v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
-    set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+    set: function (k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } },
     del: function (k) { try { localStorage.removeItem(k); } catch (e) {} }
   };
 
   var DEFAULT_SETTINGS = {
-    skin: 'light',
+    skin: 'auto',
     font_family: '',
     font_size: 20,
     line_height: 1.5,
     para_space: 0.5,
     content_width: 1000,
     purify_text: false,
-    text_convert: 'raw',
     remember_scroll: true,
     auto_scroll_speed: 20,
   };
+  var VALID_FONTS = ["", "'宋体', SimSun, STSong, serif", "'楷体', KaiTi, STKaiti, '楷体_GB2312'", "'黑体', SimHei, STHeiti, Heiti SC"];
+  var TEXT_CONVERT_MODES = ['raw', 'zh-CN', 'zh-TW'];
+
+  // 设置归一化：坏 JSON / 旧备份 / 手改 localStorage 都不会让程序崩溃或注入怪值
+  function normalizeSettings(input) {
+    var s = (input && typeof input === 'object') ? input : {};
+    function clamp(v, min, max, dflt) {
+      v = parseFloat(v);
+      if (!isFinite(v)) return dflt;
+      return Math.min(max, Math.max(min, v));
+    }
+    return {
+      skin: Object.prototype.hasOwnProperty.call(SKIN_CSS, s.skin) ? s.skin : DEFAULT_SETTINGS.skin,
+      font_family: VALID_FONTS.indexOf(s.font_family) > -1 ? s.font_family : DEFAULT_SETTINGS.font_family,
+      font_size: Math.round(clamp(s.font_size, 14, 32, DEFAULT_SETTINGS.font_size)),
+      line_height: Math.round(clamp(s.line_height, 1, 2.5, DEFAULT_SETTINGS.line_height) * 10) / 10,
+      para_space: Math.round(clamp(s.para_space, 0, 2, DEFAULT_SETTINGS.para_space) * 10) / 10,
+      content_width: Math.round(clamp(s.content_width, 600, 1200, DEFAULT_SETTINGS.content_width) / 20) * 20,
+      purify_text: s.purify_text === undefined ? DEFAULT_SETTINGS.purify_text : !!s.purify_text,
+      remember_scroll: s.remember_scroll === undefined ? DEFAULT_SETTINGS.remember_scroll : !!s.remember_scroll,
+      auto_scroll_speed: Math.round(clamp(s.auto_scroll_speed, 1, 100, DEFAULT_SETTINGS.auto_scroll_speed))
+    };
+  }
+
+  function normalizeConvertMode(v) {
+    return TEXT_CONVERT_MODES.indexOf(v) > -1 ? v : 'raw';
+  }
 
   var Settings = {
     load: function () {
-      var s = JSON.parse(store.get(STORAGE_KEYS.settings, 'null')) || {};
-      var out = {};
-      for (var k in DEFAULT_SETTINGS) {
-        out[k] = (s[k] !== undefined && s[k] !== null) ? s[k] : DEFAULT_SETTINGS[k];
-      }
-      return out;
+      var raw = store.get(STORAGE_KEYS.settings, 'null');
+      var s = null;
+      try { s = JSON.parse(raw); } catch (e) { s = null; }
+      return normalizeSettings(s);
     },
-    save: function (s) { store.set(STORAGE_KEYS.settings, JSON.stringify(s)); },
+    save: function (s) { store.set(STORAGE_KEYS.settings, JSON.stringify(normalizeSettings(s))); },
     reset: function () { store.set(STORAGE_KEYS.settings, JSON.stringify(DEFAULT_SETTINGS)); }
   };
 
-  /* ---------- 运行日志（内存 + localStorage 持久化，可导出排查） ---------- */
-  var LOG_MAX = 500; // 最多保留条数，超出丢弃最旧
-  var logs = (function () {
-    try { var a = JSON.parse(store.get(STORAGE_KEYS.logs, '[]')); return Array.isArray(a) ? a : []; }
-    catch (e) { return []; }
-  })();
-  function pad2(n) { return (n < 10 ? '0' : '') + n; }
-  function fmtLogTime(d) {
-    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
-      ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+  /* ---------- 简繁：按书保存，不再全局带到下一本 ---------- */
+  function loadBookConvert(id) {
+    if (!id) return 'raw';
+    return normalizeConvertMode(store.get(STORAGE_KEYS.convertPrefix + id, 'raw'));
   }
-  // level: info / warn / error
-  function writeLog(level, msg) {
-    try {
-      logs.push({ t: fmtLogTime(new Date()), l: level, m: String(msg) });
-      if (logs.length > LOG_MAX) logs = logs.slice(-LOG_MAX);
-      store.set(STORAGE_KEYS.logs, JSON.stringify(logs));
-    } catch (e) { /* 日志写入失败不影响主流程 */ }
+  function saveBookConvert() {
+    if (!book || !book.id) return;
+    store.set(STORAGE_KEYS.convertPrefix + book.id, normalizeConvertMode(book.textConvert));
   }
-  // 导出日志为 txt（默认由浏览器下载，保存到系统「下载」目录）
-  function exportLogs() {
-    if (!logs.length) { toast('暂无日志可导出'); return; }
-    var lines = logs.map(function (e) { return '[' + e.t + '] [' + e.l.toUpperCase() + '] ' + e.m; });
-    var head = '本地小说阅读器 · 运行日志\n导出时间: ' + fmtLogTime(new Date()) + '\n共 ' + logs.length + ' 条\n' + '----------------------------------------\n';
-    var blob = new Blob([head + lines.join('\n')], { type: 'text/plain;charset=utf-8' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url;
-    a.download = '本地小说阅读器日志_' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.txt';
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
-    writeLog('info', '导出日志 ' + logs.length + ' 条');
-    toast('已导出运行日志');
+  function bookConvertMode() {
+    return (book && book.textConvert) || 'raw';
   }
-  // 全局兜底：捕获未捕获的异常/错误，写入日志（不阻断主流程）
-  window.addEventListener('error', function (e) {
-    var detail = e && e.error ? (e.error.stack || e.error.message || '') : '';
-    writeLog('error', '未捕获异常: ' + (e.message || 'unknown') + (detail ? ' | ' + detail : ''));
-  });
-  window.addEventListener('unhandledrejection', function (e) {
-    var r = e && e.reason;
-    var detail = r ? (r.stack || r.message || String(r)) : 'unknown';
-    writeLog('error', '未处理的 Promise 拒绝: ' + detail);
-  });
 
   /* 滑轨：左蓝右灰渐变，按当前值填充 */
+  var appliedSkinKey = null;   // 当前已应用的皮肤，避免每次拖字号都重复 remove/add 皮肤 class
+  var rangeFillAccent = null;  // --accent 缓存（皮肤切换或 auto 皮肤下每次重读）
+  var rangeFillTrack = null;   // --track 缓存
   function updateRangeFill(el) {
     var min = parseFloat(el.min) || 0, max = parseFloat(el.max) || 100;
     var pct = Math.max(0, Math.min(100, ((parseFloat(el.value) - min) / (max - min)) * 100));
-    var accent = getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#007aff';
-    var track = getComputedStyle(document.body).getPropertyValue('--track').trim() || 'rgba(0,0,0,0.14)';
-    el.style.background = 'linear-gradient(to right, ' + accent + ' 0%, ' + accent + ' ' + pct + '%, ' + track + ' ' + pct + '%, ' + track + ' 100%)';
+    if (rangeFillAccent === null) {
+      rangeFillAccent = getComputedStyle(document.body).getPropertyValue('--accent').trim() || '#007aff';
+      rangeFillTrack = getComputedStyle(document.body).getPropertyValue('--track').trim() || 'rgba(0,0,0,0.14)';
+    }
+    el.style.background = 'linear-gradient(to right, ' + rangeFillAccent + ' 0%, ' + rangeFillAccent + ' ' + pct + '%, ' + rangeFillTrack + ' ' + pct + '%, ' + rangeFillTrack + ' 100%)';
   }
 
   /* ---------- 应用设置 ---------- */
-  function applySettings() {
+  function applySettings(keepLayout) {
+    // 字号/行高/段距/正文宽会改布局：先记下当前章和章内偏移，样式生效后按新偏移找回位置
+    var anchor = null;
+    if (keepLayout && book) {
+      if (chapterOffsetsDirty) rebuildChapterOffsets();
+      curIdx = currentChapterIndex(); // 防止刚滚动完、scroll rAF 还没跑导致记错章
+    }
+    if (keepLayout && book && chapterOffsets && curIdx >= 0 && chapterOffsets[curIdx] != null) {
+      anchor = {
+        idx: curIdx,
+        delta: Math.max(0, $('content-wrap').scrollTop - chapterOffsets[curIdx])
+      };
+    }
     var s = Settings.load();
-    // 兼容：旧版皮肤键不存在时回退浅色
-    if (!(s.skin in SKIN_CSS)) s.skin = 'light';
-    // 兼容：字体若为已移除的「等宽」等无效值，回退默认
-    var validFonts = ["", "'宋体', SimSun, STSong, serif", "'楷体', KaiTi, STKaiti, '楷体_GB2312'", "'黑体', SimHei, STHeiti, Heiti SC"];
-    if (validFonts.indexOf(s.font_family) === -1) { s.font_family = ''; Settings.save(s); }
-    Object.keys(SKIN_CSS).forEach(function (k) { if (SKIN_CSS[k]) document.body.classList.remove(SKIN_CSS[k]); });
-    if (SKIN_CSS[s.skin]) document.body.classList.add(SKIN_CSS[s.skin]);
+    // auto 皮肤随系统深浅色切换，滑轨渐变配色不缓存（每次重读，保证跟随系统）
+    if (s.skin === 'auto') rangeFillAccent = rangeFillTrack = null;
+    // 皮肤 class 仅在变化时切换，避免每次拖字号都全量 remove+add；皮肤变了也让配色缓存失效
+    if (appliedSkinKey !== s.skin) {
+      appliedSkinKey = s.skin;
+      rangeFillAccent = rangeFillTrack = null;
+      Object.keys(SKIN_CSS).forEach(function (k) { if (SKIN_CSS[k]) document.body.classList.remove(SKIN_CSS[k]); });
+      if (SKIN_CSS[s.skin]) document.body.classList.add(SKIN_CSS[s.skin]);
+    }
 
     var defaultFont = isMac
       ? '"PingFang SC", 苹方-简, "Microsoft YaHei", 微软雅黑, sans-serif'
@@ -892,6 +954,7 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
     $('purify-text').checked = !!s.purify_text;
     $('remember-scroll').checked = !!s.remember_scroll;
     rememberScroll = !!s.remember_scroll; // 同步缓存，滚动保存时不再每帧 Settings.load()
+    autoScrollSpeed = s.auto_scroll_speed; // 自动滚屏速度缓存，滑块拖动即时生效
     $('auto-scroll-speed-val').textContent = s.auto_scroll_speed + 'px/s';
     $('font-size-val').textContent = s.font_size + 'px';
     $('line-height-val').textContent = s.line_height;
@@ -904,14 +967,41 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
       dots[i].classList.toggle('sel', dots[i].dataset.key === s.skin);
     }
 
+    if (anchor) {
+      chapterOffsetsDirty = true;
+      if (layoutFixRaf) cancelAnimationFrame(layoutFixRaf);
+      layoutFixRaf = requestAnimationFrame(function () {
+        layoutFixRaf = null;
+        if (!book || !chapterOffsets) return;
+        rebuildChapterOffsets();
+        var top = chapterOffsets[anchor.idx];
+        if (top != null) $('content-wrap').scrollTop = Math.max(0, top + anchor.delta);
+        curIdx = currentChapterIndex();
+        updateTocHighlight();
+        updateHeaderPos();
+        saveProgress();
+      });
+    }
   }
 
   /* ---------- 书数据 ---------- */
-  var book = null; // { title, chapters:[{title, paras:[str]}], format }
+  var book = null; // { id, title, textConvert, chapters:[{title, paras:[str], blocks?}], format }
   var curIdx = -1;
-  var chapterOffsets = null; // 章节标题纵向偏移缓存（单调递增，二分查找用；渲染后重建）
-  var rememberScroll = true; // 「记忆位置」开关缓存（避免滚动时每帧 Settings.load()）
+  var chapterOffsets = null; // 已渲染章节标题的纵向偏移缓存（单调递增，二分查找用）
+  var chapterOffsetsDirty = false;
+  var CHAPTER_TOP_TOLERANCE = 28; // 目录跳章会停在标题上方 24px，判定当前章时留出余量
+  var rememberScroll = true; // 「阅读进度」开关缓存（避免滚动时每帧 Settings.load()）
   var progressTimer = null; // 进度保存防抖计时器（滚动停止后才写 localStorage）
+  var autoScrollSpeed = 20; // 自动滚屏速度缓存（滑块拖动即时生效）
+  var layoutFixRaf = null;  // 字号/行高等改动后的定位校正帧
+
+  /* 整本渐进渲染状态：章节目录一次性建好，正文按批次追加，避免首帧长时间阻塞 */
+  var renderSession = 0;      // 每次整本渲染 +1，旧的后台批次据此自动作废
+  var renderTimer = null;     // 后台渲染定时器
+  var renderInProgress = false;
+  var renderState = null;     // { i, pos, open, items }
+  var renderSettings = null;  // 本次渲染使用的设置快照
+  var renderCanPurify = false;
 
   /* ---------- TXT 章节切分 ---------- */
   var CHAP_RE = /^\s*(第\s*[0-9零一二三四五六七八九十百千万两〇○]+[章节卷回集部篇部页话]|楔子|序章|序言|序|前言|引子|引言|自序|卷首|尾声|终章|终篇|后记|番外|外篇|完结篇|大结局|第\S{1,6}[章节])/;
@@ -966,7 +1056,12 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
     // 1) BOM 优先
     if (buf.length >= 2 && buf[0] === 0xFF && buf[1] === 0xFE) return 'utf-16le';
     if (buf.length >= 2 && buf[0] === 0xFE && buf[1] === 0xFF) return 'utf-16be';
-    // 2) jschardet 检测（更准，覆盖 GB18030/GBK/Big5/UTF-16 等）
+    // 2) UTF-8 严格解码优先（确定性最强）：GBK/Big5 中文不会误通过 fatal 解码
+    try {
+      new TextDecoder('utf-8', { fatal: true }).decode(buf);
+      if (buf.indexOf(0) < 0) return 'utf-8';
+    } catch (e) {}
+    // 3) jschardet 高置信才信（对正常白话小说通常 confidence > 0.5，方向可靠）
     if (typeof window.jschardet !== 'undefined' && typeof window.jschardet.detect === 'function') {
       try {
         var r = window.jschardet.detect(buf);
@@ -981,18 +1076,19 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
         }
       } catch (e3) {}
     }
-    // 3) 启发式兜底
-    try {
-      var u = new TextDecoder('utf-8', { fatal: true }).decode(buf);
-      if (u.indexOf('\uFFFD') < 0 && buf.indexOf(0) < 0) return 'utf-8';
-    } catch (e) {}
+    // 4) 兜底：GBK/Big5 双解码，按「替换字符 + 假名」噪声选优。
+    //    中文编码的 jschardet confidence 普遍偏低（古文/短文本甚至方向都错），
+    //    而两种误读有明确特征：GBK 误读 Big5 会冒出平/片假名，Big5 误读 GBK 会冒出 U+FFFD。
     try {
       var g = new TextDecoder('gbk').decode(buf);
-      if (g.indexOf('\uFFFD') < 0) return 'gbk';
-    } catch (e) {}
-    try {
       var b = new TextDecoder('big5').decode(buf);
-      if (b.indexOf('\uFFFD') < 0) return 'big5';
+      var noise = function (t) {
+        return (t.match(/\uFFFD/g) || []).length * 100 +      // 替换字符权重最高
+               (t.match(/[\u3040-\u30ff]/g) || []).length;     // 假名是 GBK 误读 Big5 的典型噪声
+      };
+      if (noise(g) < noise(b)) return 'gbk';
+      if (noise(b) < noise(g)) return 'big5';
+      return 'gbk'; // 噪声相同默认 GBK（中文最常见）
     } catch (e) {}
     return 'utf-8';
   }
@@ -1041,13 +1137,22 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
       list.appendChild(item);
     }
   }
+  function safeFileName(name) {
+    var s = String(name || '')
+      .replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return (s || '未命名').slice(0, 150);
+  }
   function downloadBlob(bytes, name) {
-    var blob = new Blob([bytes], { type: 'text/plain;charset=utf-8' });
+    // 目标编码可能是 GBK/Big5/UTF-16，不能标成 UTF-8 文本
+    var blob = new Blob([bytes], { type: 'application/octet-stream' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
-    a.href = url; a.download = name;
+    a.href = url; a.download = safeFileName(name);
     document.body.appendChild(a); a.click();
-    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 600);
+    // 大文件下载可能持续较久，过早 revoke 会中断下载
+    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 60000);
   }
   function doEncode() {
     if (!encodeFiles.length) { toast('请先添加要转码的文本文件'); return; }
@@ -1058,9 +1163,9 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
     encodeFiles.forEach(function (f) {
       chain = chain.then(function () {
         if (f.type === 'book') {
-          // 当前小说：直接用已解码文本编码导出
+          // 当前小说：章节名 + 正文一起导出（不能只拼 paras，标题会被吞掉）
           try {
-            var t = book.chapters.map(function (ch) { return ch.paras.join('\n'); }).join('\n\n');
+            var t = bookPlainText();
             var o = encodeOutput(t, dstSel);
             downloadBlob(o, (book.title || '当前小说') + '_' + ENCODE_SUFFIX[dstSel] + '.txt');
             ok++;
@@ -1084,7 +1189,6 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
       $('encode-mask').classList.remove('open');
       encodeFiles = [];
       $('encode-list').innerHTML = '';
-      writeLog('info', '转码完成：成功 ' + ok + ' 个' + (fail ? '，失败 ' + fail + ' 个' : ''));
       toast('转码完成：成功 ' + ok + ' 个' + (fail ? '，失败 ' + fail + ' 个' : ''));
     });
   }
@@ -1160,48 +1264,150 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
             }
           }
           return f ? f.async('string').then(function (html) {
-            return extractEpubChapter(html);
-          }) : Promise.resolve({ title: '', paras: [] });
+            var c = extractEpubChapter(html);
+            return resolveEpubImages(c, full, o.zip);
+          }) : Promise.resolve({ title: '', paras: [], blocks: [] });
         });
         return Promise.all(read).then(function (arr) {
           var chapters = [];
           for (var i = 0; i < o.spine.length; i++) {
             var c = arr[i];
-            if (c && c.paras && c.paras.length) chapters.push({ title: (c.title || ((i + 1) + ' 章')), paras: c.paras });
+            if (c && c.blocks && c.blocks.length) {
+              chapters.push({ title: (c.title || ('第 ' + (i + 1) + ' 章')), paras: c.paras, blocks: c.blocks });
+            }
           }
+          if (!chapters.length) throw new Error('EPUB 内没有可显示的正文');
           return { title: o.title, chapters: chapters };
         });
       });
     }).then(function (b) { cb(b); }).catch(function (e) { errCb(e.message || 'EPUB 解析失败'); });
   }
 
+  /* EPUB 内嵌图片：把 <img> 的相对路径解析成 zip 内文件，再转 data URL（离线可读、无额外请求） */
+  var IMG_MIME = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', gif: 'image/gif',
+    webp: 'image/webp', svg: 'image/svg+xml', bmp: 'image/bmp', avif: 'image/avif'
+  };
+  function normalizeZipPath(path) {
+    var parts = String(path || '').replace(/\\/g, '/').split('/');
+    var out = [];
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i];
+      if (!p || p === '.') continue;
+      if (p === '..') { out.pop(); continue; }
+      out.push(p);
+    }
+    return out.join('/');
+  }
+  function decodeZipPath(path) {
+    try { return decodeURIComponent(path); } catch (e) { return path; }
+  }
+  function findZipEntry(zip, full) {
+    return zip.file(full) || zip.file(decodeZipPath(full)) || null;
+  }
+  function epubImageData(zip, chapterPath, src) {
+    if (!src) return Promise.resolve(null);
+    if (/^data:/i.test(src)) return Promise.resolve(src);
+    // 外链图片不做网络请求（阅读器离线优先），直接忽略
+    if (/^(?:https?:)?\/\//i.test(src) || /^file:/i.test(src)) return Promise.resolve(null);
+    src = src.split('#')[0].split('?')[0];
+    if (!src) return Promise.resolve(null);
+    // 以 / 开头的是包根相对路径，其余相对章节文件
+    var full = src.charAt(0) === '/'
+      ? normalizeZipPath(src)
+      : normalizeZipPath(chapterPath.replace(/[^/]*$/, '') + src);
+    var entry = findZipEntry(zip, full);
+    if (!entry) {
+      // 路径大小写/编码不一致时按文件名模糊匹配
+      var tail = decodeZipPath(full).split('/').pop();
+      var keys = Object.keys(zip.files);
+      for (var i = 0; i < keys.length; i++) {
+        if (zip.files[keys[i]].dir) continue;
+        if (decodeZipPath(keys[i].replace(/\\/g, '/')).split('/').pop() === tail) { entry = zip.file(keys[i]); break; }
+      }
+    }
+    if (!entry) return Promise.resolve(null);
+    var ext = (full.match(/\.([a-z0-9]+)$/i) || [])[1];
+    var mime = IMG_MIME[ext ? ext.toLowerCase() : ''] || 'image/jpeg';
+    return entry.async('base64').then(function (b64) {
+      return 'data:' + mime + ';base64,' + b64;
+    }).catch(function () { return null; });
+  }
+  function resolveEpubImages(chapter, chapterPath, zip) {
+    var blocks = chapter.blocks || [];
+    var jobs = blocks.map(function (b) {
+      if (b.type !== 'img') return null;
+      return epubImageData(zip, chapterPath, b.src).then(function (dataUrl) {
+        b.src = dataUrl;
+      });
+    });
+    return Promise.all(jobs).then(function () {
+      chapter.blocks = blocks.filter(function (b) { return b.type !== 'img' || b.src; });
+      chapter.paras = chapter.blocks.filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; });
+      return chapter;
+    });
+  }
+
   function extractEpubChapter(html) {
     var d = new DOMParser().parseFromString(html, 'text/html');
-    // 去掉脚本/样式
+    // 去掉脚本/样式/导航等非正文结构
     d.querySelectorAll('script, style, nav, aside, header, footer').forEach(function (n) { n.remove(); });
-    // 提取真实章节名：取第一个标题标签文本作为顶部章节名；该标题同时保留在正文段落中
-    var h = d.querySelector('h1, h2, h3, h4, h5, h6');
-    var title = h ? (h.textContent || '').replace(/\s+/g, ' ').trim() : '';
-    var paras = [];
+    // 第一个标题作为章节名，正文里不再重复；后续 h2/h3 等作为小标题保留
+    var firstHeading = d.querySelector('h1, h2, h3, h4, h5, h6');
+    var title = firstHeading ? (firstHeading.textContent || '').replace(/\s+/g, ' ').trim() : '';
+    var blocks = [];
     var walker = d.createTreeWalker(d.body, NodeFilter.SHOW_ELEMENT);
     while (walker.nextNode()) {
       var el = walker.currentNode;
-      if (/^[HhP]$/.test(el.tagName) || /^[Hh][1-6]$/.test(el.tagName)) {
+      var tag = el.tagName ? el.tagName.toUpperCase() : '';
+      if (el === firstHeading) continue;
+      if (/^H[1-6]$/.test(tag) || tag === 'P' || tag === 'FIGCAPTION') {
         var txt = (el.textContent || '').replace(/\s+/g, ' ').trim();
-        if (txt) paras.push(txt);
+        if (txt) blocks.push({ type: 'text', text: txt });
+      } else if ((tag === 'LI' || tag === 'BLOCKQUOTE') && !hasBlockChild(el)) {
+        // 容器里有 p 时交给 p 收，避免 li>p 收两遍
+        var lt = (el.textContent || '').replace(/\s+/g, ' ').trim();
+        if (lt) blocks.push({ type: 'text', text: lt });
+      } else if (tag === 'DIV' || tag === 'SECTION' || tag === 'ARTICLE') {
+        // 只收没有块级子元素的容器，避免 div>p 重复
+        if (!hasBlockChild(el)) {
+          var dt = (el.textContent || '').replace(/\s+/g, ' ').trim();
+          if (dt) blocks.push({ type: 'text', text: dt });
+        }
+      } else if (tag === 'IMG' || tag === 'IMAGE') {
+        var src = el.getAttribute('src') || el.getAttribute('xlink:href') || el.getAttribute('href') || '';
+        if (src) blocks.push({ type: 'img', src: src, alt: el.getAttribute('alt') || '' });
       }
     }
-    // 兜底：若没有 p/h，直接取 body 文本按段拆分
-    if (paras.length === 0) {
+    // 兜底：若没有块级元素，直接取 body 文本按段拆分
+    if (blocks.length === 0) {
       var raw = (d.body.textContent || '').replace(/\s+/g, ' ').trim();
-      if (raw) paras = raw.split(/[。！？；\n]/).map(function(s){return s.trim();}).filter(Boolean);
+      if (raw) {
+        raw.split(/[。！？；\n]/).map(function (s) { return s.trim(); }).filter(Boolean).forEach(function (s) {
+          blocks.push({ type: 'text', text: s });
+        });
+      }
     }
-    return { title: title, paras: paras };
+    return {
+      title: title,
+      blocks: blocks,
+      paras: blocks.filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; })
+    };
   }
 
   /* ---------- Markdown 解析 ---------- */
   function stripMdInline(s) {
-    return s.replace(/^#+\s*/, '').replace(/[*_`>~-]/g, '').replace(/\s+$/g, '').trim();
+    // 只去掉 Markdown 标记，保留正文里的连字符/斜杠等真实字符
+    s = s.replace(/^\s{0,3}#{1,6}\s*/, '')
+         .replace(/^\s{0,3}>\s?/, '')
+         .replace(/^\s{0,3}(?:[-+*]|\d+[.)])\s+/, '');
+    s = s.replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+         .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+         .replace(/(\*\*|__)(.*?)\1/g, '$2')
+         .replace(/(\*|_)(.*?)\1/g, '$2')
+         .replace(/~~(.*?)~~/g, '$1')
+         .replace(/`([^`]*)`/g, '$1');
+    return s.replace(/\s+$/g, '').trim();
   }
   function splitMarkdown(text) {
     var lines = text.split(/\r?\n/);
@@ -1209,6 +1415,8 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
     var cur = null;
     for (var i = 0; i < lines.length; i++) {
       var raw = lines[i];
+      // 分隔线 / setext 下划线不进入正文
+      if (/^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/.test(raw)) continue;
       var m = /^\s{0,3}(#{1,6})\s+(.*)$/.exec(raw);
       if (m) {
         if (cur) chapters.push(cur);
@@ -1229,17 +1437,24 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
     return chapters;
   }
   function loadMarkdown(file, cb, errCb) {
-    file.text().then(function (text) {
+    // 和 TXT 一样先按检测到的编码解码，GBK/UTF-16 的 md 不再乱码
+    file.arrayBuffer().then(function (buf) {
       try {
+        var text = decodeTxt(new Uint8Array(buf));
         cb({ title: (file.name || '').replace(/\.(md|markdown)$/i, ''), chapters: splitMarkdown(text) });
       } catch (e) { errCb('Markdown 解析失败'); }
     }).catch(function () { errCb('读取文件失败'); });
   }
 
   /* ---------- HTML 解析 ---------- */
+  // 容器里只要有块级子元素，就交给子元素收文本，避免父子重复
+  function hasBlockChild(el) {
+    return !!el.querySelector('p, div, article, section, li, blockquote, figcaption, h1, h2, h3, h4, h5, h6');
+  }
   function loadHtml(file, cb, errCb) {
-    file.text().then(function (text) {
+    file.arrayBuffer().then(function (buf) {
       try {
+        var text = decodeTxt(new Uint8Array(buf));
         var d = new DOMParser().parseFromString(text, 'text/html');
         d.querySelectorAll('script, style, nav, aside, header, footer, noscript, iframe, form').forEach(function (n) { n.remove(); });
         var chapters = [];
@@ -1249,18 +1464,59 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
           if (!cur) { chapters.push({ title: '正文', paras: [] }); cur = chapters[chapters.length - 1]; }
           cur.paras.push(txt);
         }
-        var walker = d.createTreeWalker(d.body, NodeFilter.SHOW_ELEMENT);
-        while (walker.nextNode()) {
-          var el = walker.currentNode;
-          var tag = el.tagName ? el.tagName.toLowerCase() : '';
-          if (/^h[1-3]$/.test(tag)) {
-            var ht = (el.textContent || '').replace(/\s+/g, ' ').trim();
-            if (ht) { if (cur) chapters.push(cur); cur = { title: ht, paras: [ht] }; }
-          } else if (tag === 'p' || tag === 'div' || tag === 'article' || tag === 'section') {
-            pushPara((el.textContent || '').replace(/\s+/g, ' ').trim());
+        function cleanHtmlText(s) {
+          return (s || '').replace(/\s+/g, ' ').trim();
+        }
+        // 递归遍历：容器里的裸文本也按文档顺序收进来，不再丢「前言/尾部」这类内容
+        function walk(node) {
+          for (var child = node.firstChild; child; child = child.nextSibling) {
+            if (child.nodeType === 3) {
+              pushPara(cleanHtmlText(child.nodeValue));
+              continue;
+            }
+            if (child.nodeType !== 1) continue;
+            var tag = child.tagName ? child.tagName.toLowerCase() : '';
+            if (/^h[1-3]$/.test(tag)) {
+              var ht = cleanHtmlText(child.textContent);
+              if (ht) {
+                // pushPara 可能已把 cur 放进 chapters，避免同一对象被推两次
+                if (cur && cur.paras.length && chapters[chapters.length - 1] !== cur) chapters.push(cur);
+                // 标题只作为章节名，正文里不再重复
+                cur = { title: ht, paras: [] };
+              }
+              continue;
+            }
+            if (/^h[4-6]$/.test(tag)) {
+              // h4~h6 多为小节标题，保留成正文段落而不是丢掉
+              pushPara(cleanHtmlText(child.textContent));
+              continue;
+            }
+            if (tag === 'p' || tag === 'figcaption' || tag === 'td' || tag === 'th') {
+              pushPara(cleanHtmlText(child.textContent));
+              continue;
+            }
+            if ((tag === 'li' || tag === 'blockquote' || tag === 'div' || tag === 'article' || tag === 'section') &&
+                !hasBlockChild(child)) {
+              pushPara(cleanHtmlText(child.textContent));
+              continue;
+            }
+            if (tag === 'br' || tag === 'img' || tag === 'hr') continue;
+            walk(child);
           }
         }
-        if (cur) chapters.push(cur);
+        walk(d.body);
+        if (cur && (cur.paras.length || chapters.length === 0) && chapters[chapters.length - 1] !== cur) chapters.push(cur);
+        // 兜底：整页没有块级标签时，按正文文本拆分
+        var totalParas = chapters.reduce(function (n, c) { return n + c.paras.length; }, 0);
+        if (!totalParas) {
+          var raw = (d.body.textContent || '').replace(/\s+/g, ' ').trim();
+          chapters = [];
+          if (raw) {
+            raw.split(/[。！？；\n]/).map(function (s) { return s.trim(); }).filter(Boolean).forEach(function (s) {
+              pushPara(s);
+            });
+          }
+        }
         if (chapters.length === 0) chapters.push({ title: '正文', paras: [] });
         cb({ title: (file.name || '').replace(/\.html?$/i, ''), chapters: chapters });
       } catch (e) { errCb('HTML 解析失败'); }
@@ -1287,6 +1543,7 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
         });
       });
       return chain.then(function () {
+        if (!chosen) throw new Error('压缩包内 txt 读取失败');
         var text = decodeTxt(new Uint8Array(chosen.buf));
         var chapters = splitTxt(text);
         var inner = chosen.path.replace(/\.txt$/i, '');
@@ -1298,6 +1555,17 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
   /* ---------- 渲染 ---------- */
   // 清空阅读区：showEmpty=false 显示居中占位（初始空态），showEmpty=true 完全隐藏（打开失败时）
   function clearReadingArea(showEmpty) {
+    // 停掉后台渐进渲染与待写进度，避免旧书的状态污染新书
+    renderSession++;
+    if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
+    if (layoutFixRaf) { cancelAnimationFrame(layoutFixRaf); layoutFixRaf = null; }
+    clearTimeout(progressTimer);
+    renderInProgress = false;
+    renderState = null;
+    chapterOffsets = null;
+    chapterOffsetsDirty = false;
+    book = null;
+    $('content').innerHTML = '';
     $('content').style.display = 'none';
     $('empty').style.display = showEmpty ? 'flex' : 'none';
     $('book-title').textContent = '未打开书籍';
@@ -1311,71 +1579,254 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
   function renderEmpty() { clearReadingArea(true); }  // 初始空态：显示占位提示
   function hideReadingArea() { clearReadingArea(false); } // 打开失败：不残留占位提示文字
 
-  /* ---------- 整本连续渲染（连载模式） ---------- */
-  function renderWholeBook(resumeOffset) {
-    if (!book) return;
-    var content = $('content');
-    content.innerHTML = '';
-    var s = Settings.load();
-    // 正文优化仅对 TXT/MD/HTML/ZIP(内含txt) 生效，EPUB 跳过
-    var canPurify = book.format !== 'epub';
-    // 用 DocumentFragment 先离屏构建整本书 DOM，最后一次性插入 → 大书不再逐章节/逐段反复 reflow，降低首渲耗时与布局抖动
-    var frag = document.createDocumentFragment();
-    book.chapters.forEach(function (ch, i) {
-      var h = document.createElement('h1');
-      h.className = 'chapter-title';
-      h.setAttribute('data-chapter-i', i);
-      h.textContent = ch.title || ('第 ' + (i + 1) + ' 章');
-      frag.appendChild(h);
-      var pxs = (s.purify_text && canPurify && typeof purifyChapterParas === 'function') ? purifyChapterParas(ch.paras) : ch.paras;
-      pxs.forEach(function (p) {
-        var txt = p;
-        if (s.text_convert !== 'raw' && typeof convertText === 'function') {
-          // 单段转换异常回退原文，不影响整本渲染（稳定性）；无简繁库则保持原文
-          try { txt = convertText(txt, s.text_convert); } catch (e) { /* 保留原文 */ }
-        }
-        var el = document.createElement('p');
-        el.textContent = txt;
-        frag.appendChild(el);
-      });
-      (ch.imgs || []).forEach(function (cv) {
-        frag.appendChild(cv);
-      });
-    });
-    content.appendChild(frag); // 一次性插入，替代逐节点 appendChild
+  /* ---------- 纯文本导出（章节名 + 正文，供转码/简繁使用） ---------- */
+  // 章节标题统一 fallback：空标题一律显示「第 N 章」，保证正文/目录/导出三处一致
+  function chapterTitle(ch, i) {
+    return ch.title || ('第 ' + (i + 1) + ' 章');
+  }
+  function bookPlainText() {
+    if (!book) return '';
+    return book.chapters.map(function (ch, i) {
+      var lines = ch.blocks
+        ? ch.blocks.filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; })
+        : (ch.paras || []);
+      return chapterTitle(ch, i) + '\n' + lines.join('\n');
+    }).join('\n\n');
+  }
 
-    // 渲染完成后刷新章节标题缓存（供 scroll 高频读取）+ 纵向偏移缓存（二分查找用）
-    var chapterTitleEls = content.querySelectorAll('.chapter-title');
-    chapterOffsets = new Array(chapterTitleEls.length);
-    for (var oi = 0; oi < chapterTitleEls.length; oi++) chapterOffsets[oi] = chapterTitleEls[oi].offsetTop;
+  /* ---------- 整本连续渲染（章节名一次建目录，正文分批渐进追加） ---------- */
+  var remeasureTimer = null;
 
-    $('book-title').textContent = book.title;
-    $('empty').style.display = 'none';
-    $('content').style.display = 'block';
+  function safeConvertText(text, mode) {
+    if (mode === 'raw' || !text || typeof convertText !== 'function') return text;
+    try { return convertText(text, mode); } catch (e) { return text; }
+  }
 
-    $('content-wrap').scrollTop = 0;
-    // 恢复滚动位置
-    if (resumeOffset !== undefined && resumeOffset !== null) {
-      $('content-wrap').scrollTop = resumeOffset;
-    } else {
-      var saved = s.remember_scroll ? readProgress() : null;
-      if (saved && saved.offset) $('content-wrap').scrollTop = saved.offset;
+  function chapterItems(ch, s, canPurify) {
+    if (ch.blocks) return ch.blocks;
+    var paras = (s.purify_text && canPurify && typeof purifyChapterParas === 'function')
+      ? purifyChapterParas(ch.paras) : (ch.paras || []);
+    return paras.map(function (t) { return { type: 'text', text: t }; });
+  }
+
+  function makeChapterTitle(ch, i) {
+    var h = document.createElement('h1');
+    h.className = 'chapter-title';
+    h.setAttribute('data-chapter-i', i);
+    // 存未转换的原文，切简繁时就地重写用（不重建 DOM）
+    h.__rawText = chapterTitle(ch, i);
+    h.textContent = safeConvertText(h.__rawText, bookConvertMode());
+    return h;
+  }
+
+  function appendRenderItem(frag, item, s) {
+    if (!item) return;
+    if (item.type === 'img') {
+      if (!item.src) return;
+      var img = document.createElement('img');
+      img.className = 'chapter-img';
+      img.src = item.src;
+      img.alt = item.alt || '';
+      // data URL 已在内存里，直接解码保证章节高度稳定；外链才延迟加载
+      if (!/^data:/i.test(item.src)) img.loading = 'lazy';
+      img.decoding = 'async';
+      // 图片解码会改变章节高度：加载后重算偏移，保证目录高亮/进度不漂移
+      img.addEventListener('load', scheduleRemeasure, { once: true });
+      frag.appendChild(img);
+      return;
     }
-    curIdx = currentChapterIndex();
-    updateTocHighlight();
+    var txt = item.text;
+    if (!txt) return;
+    var p = document.createElement('p');
+    // 存未转换的原文（净化后的显示文本），切简繁时就地重写用，避免二次转换叠加
+    p.__rawText = txt;
+    p.textContent = safeConvertText(txt, bookConvertMode());
+    frag.appendChild(p);
+  }
 
-    // 布局稳定后校正：内容刚插入、scrollTop 恢复、offsetTop 缓存首帧未完全稳定，
-    // 下一帧重算偏移缓存 + 当前章，并让标题栏、目录高亮与正文三者严格同帧一致
-    requestAnimationFrame(function () {
-      chapterTitleEls = content.querySelectorAll('.chapter-title');
-      chapterOffsets = new Array(chapterTitleEls.length);
-      for (var oi = 0; oi < chapterTitleEls.length; oi++) chapterOffsets[oi] = chapterTitleEls[oi].offsetTop;
+  // 追加一个时间片；stopAtChapter 非空时保证该章完整渲染后停手
+  function appendRenderSlice(deadline, stopAtChapter) {
+    if (!book || !renderState) return true;
+    var frag = document.createDocumentFragment();
+    var added = 0;
+    var content = $('content');
+    function flush() {
+      content.appendChild(frag);
+      chapterOffsetsDirty = true;
+    }
+    while (renderState.i < book.chapters.length &&
+           (stopAtChapter === undefined || stopAtChapter === null || renderState.i <= stopAtChapter)) {
+      var ch = book.chapters[renderState.i];
+      if (!renderState.open) {
+        renderState.items = chapterItems(ch, renderSettings, renderCanPurify);
+        renderState.pos = 0;
+        frag.appendChild(makeChapterTitle(ch, renderState.i));
+        renderState.open = true;
+        added++;
+      }
+      var items = renderState.items;
+      while (renderState.pos < items.length) {
+        if (added > 0 && performance.now() > deadline) { flush(); return false; }
+        appendRenderItem(frag, items[renderState.pos], renderSettings);
+        renderState.pos++;
+        added++;
+        if ((added & 31) === 0 && performance.now() > deadline) { flush(); return false; }
+      }
+      renderState.open = false;
+      renderState.i++;
+      if (added > 0 && performance.now() > deadline) { flush(); return false; }
+    }
+    flush();
+    return renderState.i >= book.chapters.length;
+  }
+
+  function rebuildChapterOffsets() {
+    if (!book) return;
+    var els = $('content').querySelectorAll('.chapter-title');
+    chapterOffsets = new Array(els.length);
+    for (var i = 0; i < els.length; i++) chapterOffsets[i] = els[i].offsetTop;
+    chapterOffsetsDirty = false;
+  }
+
+  function scheduleRemeasure() {
+    clearTimeout(remeasureTimer);
+    remeasureTimer = setTimeout(function () {
+      if (!book) return;
+      rebuildChapterOffsets();
       curIdx = currentChapterIndex();
       updateTocHighlight();
       updateHeaderPos();
+    }, 150);
+  }
+
+  function finishRender() {
+    if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
+    renderInProgress = false;
+    rebuildChapterOffsets();
+    curIdx = currentChapterIndex();
+    updateTocHighlight();
+    updateHeaderPos();
+    saveProgress();
+  }
+
+  function scheduleRenderRest() {
+    if (!book || !renderState) return;
+    if (renderState.i >= book.chapters.length) { finishRender(); return; }
+    renderInProgress = true;
+    var session = renderSession;
+    function step() {
+      renderTimer = null;
+      if (session !== renderSession || !book || !renderState) return;
+      if (renderState.i >= book.chapters.length) { finishRender(); return; }
+      appendRenderSlice(performance.now() + 10);
+      if (renderState.i >= book.chapters.length) { finishRender(); return; }
+      renderInProgress = true;
+      renderTimer = setTimeout(step, 0);
+    }
+    if (renderTimer) clearTimeout(renderTimer);
+    renderTimer = setTimeout(step, 0);
+  }
+
+  // 目录跳章时把目标章之前的正文补齐（同步；大跳转会有一次性耗时）
+  function renderThrough(i, cb) {
+    if (!book || !renderState) { if (cb) cb(); return; }
+    if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
+    var session = renderSession;
+    while (renderState.i <= i && renderState.i < book.chapters.length) {
+      appendRenderSlice(Infinity, i);
+      if (session !== renderSession) return;
+    }
+    rebuildChapterOffsets();
+    renderInProgress = renderState.i < book.chapters.length;
+    if (renderInProgress) scheduleRenderRest();
+    else finishRender();
+    if (cb) cb();
+  }
+
+  function renderWholeBook(resume) {
+    if (!book) return;
+    var content = $('content');
+    var wrap = $('content-wrap');
+    var s = Settings.load();
+    renderSettings = s;
+    // 正文优化仅对 TXT/MD/HTML/ZIP(内含txt) 生效，EPUB 跳过
+    renderCanPurify = book.format !== 'epub';
+
+    // 作废旧渲染批次
+    renderSession++;
+    if (renderTimer) { clearTimeout(renderTimer); renderTimer = null; }
+    if (layoutFixRaf) { cancelAnimationFrame(layoutFixRaf); layoutFixRaf = null; }
+    renderInProgress = false;
+    renderState = { i: 0, pos: 0, open: false, items: null };
+    chapterOffsets = [];
+    chapterOffsetsDirty = true;
+
+    content.innerHTML = '';
+    content.style.display = 'block';
+    $('empty').style.display = 'none';
+    $('book-title').textContent = book.title;
+    wrap.scrollTop = 0;
+
+    // resume: {offset, chapter}；兼容旧的纯数字 offset
+    var saved = null;
+    if (resume && typeof resume === 'object') saved = resume;
+    else if (typeof resume === 'number' && resume > 0) saved = { offset: resume };
+    else saved = s.remember_scroll ? readProgress() : null;
+    var target = (saved && isFinite(saved.offset) && saved.offset > 0) ? saved.offset : 0;
+    var chap = (saved && typeof saved.chapter === 'number' && saved.chapter >= 0) ? Math.floor(saved.chapter) : -1;
+    var delta = (saved && isFinite(saved.delta) && saved.delta >= 0) ? parseFloat(saved.delta) : null;
+    if (chap >= book.chapters.length) chap = book.chapters.length - 1;
+
+    if (chap >= 0) {
+      // 恢复位置：先补齐到上次所在章，保证目标 offset 落在同一内容前缀里
+      while (renderState.i <= chap && renderState.i < book.chapters.length) {
+        appendRenderSlice(Infinity, chap);
+      }
+    } else if (target > 0) {
+      // 旧版进度只有像素 offset，没有章号：只能先渲染全书再定位
+      while (renderState.i < book.chapters.length) appendRenderSlice(Infinity);
+    } else {
+      // 新开书：先渲染约 12ms，首屏立即出现，其余后台补齐
+      appendRenderSlice(performance.now() + 12);
+    }
+
+    // 有章内偏移时按「新章首 + delta」定位，换字号/行高后仍回到同一段
+    if (chap >= 0 && delta != null) {
+      var deltaEl = content.querySelector('.chapter-title[data-chapter-i="' + chap + '"]');
+      if (deltaEl) target = Math.max(0, deltaEl.offsetTop + delta);
+    } else if (target === 0 && chap > 0) {
+      // 理论上 offset=0 且 chapter>0 不会出现；真遇到时按章首定位
+      var chapEl = content.querySelector('.chapter-title[data-chapter-i="' + chap + '"]');
+      if (chapEl) target = chapEl.offsetTop;
+    }
+
+    wrap.scrollTop = target;
+    curIdx = chap >= 0 ? chap : 0;
+    updateTocHighlight();
+
+    renderInProgress = renderState.i < book.chapters.length;
+    if (renderInProgress) {
+      updateHeaderPos();
+      scheduleRenderRest();
+    } else {
+      rebuildChapterOffsets();
+      curIdx = currentChapterIndex();
+      updateTocHighlight();
+      updateHeaderPos();
+    }
+
+    // 布局稳定后校正章节偏移；不重置 scrollTop，避免用户刚开始阅读就被拉回
+    requestAnimationFrame(function () {
+      if (!book || !renderState) return;
+      rebuildChapterOffsets();
+      if (!renderInProgress) {
+        curIdx = currentChapterIndex();
+        updateTocHighlight();
+      }
+      updateHeaderPos();
     });
 
-    // 整本渲染淡入过渡
+    // 整本渲染淡入过渡（一次重排换取动画重新播放）
     content.classList.remove('fade');
     void content.offsetWidth;
     content.classList.add('fade');
@@ -1384,9 +1835,10 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
   // 当前滚动位置所在的章节序号
   function currentChapterIndex() {
     if (!book) return 0;
-    var scroll = $('content-wrap').scrollTop;
+    if (chapterOffsetsDirty) rebuildChapterOffsets();
+    var scroll = $('content-wrap').scrollTop + CHAPTER_TOP_TOLERANCE;
     if (!chapterOffsets || !chapterOffsets.length) return 0;
-    // 偏移量单调递增 → 二分查找最后一个「标题已滚过顶缘」的章节（比线性遍历更省，避免每帧遍历+读 offsetTop 触发 reflow）
+    // 偏移量单调递增 → 二分查找最后一个「标题已进入视口顶部容差」的章节
     var lo = 0, hi = chapterOffsets.length - 1, idx = 0;
     while (lo <= hi) {
       var mid = (lo + hi) >> 1;
@@ -1400,14 +1852,27 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
   function scrollToChapter(i) {
     if (!book || i < 0 || i >= book.chapters.length) return;
     autoScrollStop(); // 停止自动滚屏，避免冲突
-    var el = $('content').querySelector('.chapter-title[data-chapter-i="' + i + '"]');
-    if (!el) return;
-    curIdx = i;
-    updateTocHighlight();
-    updateHeaderPos();
-    var wrap = $('content-wrap');
-    // 原生平滑滚动：平滑与打断交给浏览器，代码更短更稳
-    wrap.scrollTo({ top: Math.max(0, el.offsetTop - 24), behavior: 'smooth' });
+    function go() {
+      if (!book || i >= book.chapters.length) return;
+      var el = $('content').querySelector('.chapter-title[data-chapter-i="' + i + '"]');
+      if (!el) return;
+      curIdx = i;
+      updateTocHighlight();
+      updateHeaderPos();
+      var wrap = $('content-wrap');
+      var top = Math.max(0, el.offsetTop - 24);
+      // 近距离用平滑滚动；跨几十万字时平滑滚动会拖很久，直接跳过去
+      var far = Math.abs(top - wrap.scrollTop) > 20000;
+      wrap.scrollTo({ top: top, behavior: far ? 'auto' : 'smooth' });
+    }
+    var existing = $('content').querySelector('.chapter-title[data-chapter-i="' + i + '"]');
+    if (existing) { go(); return; }
+    // 目标章还没渲染到：先把前面的正文补齐，再滚动
+    toast('正在载入该章节…');
+    setTimeout(function () {
+      if (!book || i >= book.chapters.length) return;
+      renderThrough(i, go);
+    }, 30);
   }
 
   // 目录高亮当前章节
@@ -1436,29 +1901,72 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
     if (!book || curIdx < 0) return;
     var ch = $('book-chapter'), pg = $('book-progress');
     if (ch) {
-      // 显示当前章节的标题本身，避免用序号拼接在含“正文”序章时错位
+      // 显示当前章节的标题本身，避免用序号拼接在含“正文”序章时错位；简繁跟正文一致
       var chap = book.chapters[curIdx];
-      ch.textContent = (chap && chap.title) ? chap.title : ('第 ' + (curIdx + 1) + ' 章');
+      var title = (chap && chap.title) ? chap.title : ('第 ' + (curIdx + 1) + ' 章');
+      ch.textContent = safeConvertText(title, bookConvertMode());
     }
     if (pg) {
+      if (renderInProgress && renderState) {
+        // 渐进渲染期间 scrollHeight 还在增长，此时算百分比会来回跳，直接显示载入进度
+        var pct = Math.min(99, Math.floor(renderState.i / Math.max(1, book.chapters.length) * 100));
+        pg.textContent = '载入 ' + pct + '%';
+        return;
+      }
       var wrap = $('content-wrap');
       var max = wrap.scrollHeight - wrap.clientHeight;
       pg.textContent = (max > 0 ? (wrap.scrollTop / max * 100).toFixed(1) : '0.0') + '%';
     }
   }
 
-  // 设置变更后保持滚动位置重绘
+  // 设置变更后保持「当前章 + 章内偏移」重绘，而不是只记绝对像素
   function rerenderKeepScroll() {
     if (!book) return;
-    var off = $('content-wrap').scrollTop;
-    renderWholeBook(off);
+    var wrap = $('content-wrap');
+    curIdx = currentChapterIndex();
+    var idx = curIdx >= 0 ? curIdx : 0;
+    var delta = 0;
+    if (chapterOffsets && chapterOffsets[idx] != null) {
+      delta = Math.max(0, wrap.scrollTop - chapterOffsets[idx]);
+    }
+    renderWholeBook({ offset: 0, chapter: idx });
+    rebuildChapterOffsets();
+    if (chapterOffsets[idx] != null) wrap.scrollTop = Math.max(0, chapterOffsets[idx] + delta);
+    curIdx = currentChapterIndex();
+    updateTocHighlight();
+    updateHeaderPos();
     saveProgress();
   }
 
-  function buildToc() {
+  // 简繁切换：不重建 DOM，只把已渲染的章节名/段落按新状态就地重写
+  // 每个元素上存了 __rawText（未转换的显示原文），从它重新转换，反复切换也不会叠加
+  function applyConvertToRendered() {
+    if (!book) return;
+    var mode = bookConvertMode();
+    var els = $('content').querySelectorAll('.chapter-title, p');
+    for (var i = 0; i < els.length; i++) {
+      var el = els[i];
+      if (el.__rawText == null) continue; // 兜底：没有原文的元素（理论上不存在）跳过
+      el.textContent = safeConvertText(el.__rawText, mode);
+    }
+    // 简繁字宽有细微差异，重算一次偏移并按「当前章 + 章内偏移」补正，避免进度漂移
+    var wrap = $('content-wrap');
+    var idx = curIdx;
+    var delta = 0;
+    if (chapterOffsets && chapterOffsets[idx] != null) {
+      delta = Math.max(0, wrap.scrollTop - chapterOffsets[idx]);
+    }
+    rebuildChapterOffsets();
+    if (chapterOffsets[idx] != null) wrap.scrollTop = Math.max(0, chapterOffsets[idx] + delta);
+    curIdx = currentChapterIndex();
+  }
+
+  function buildToc(keepOpen) {
     var sb = $('sidebar');
+    var wasOpen = sb.classList.contains('open');
     sb.innerHTML = '';
     if (!book) return;
+    var mode = bookConvertMode();
     book.chapters.forEach(function (ch, i) {
       var d = document.createElement('div');
       d.className = 'chap';
@@ -1466,28 +1974,77 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
       ind.className = 'chap-ind';
       ind.textContent = (i + 1);
       d.appendChild(ind);
-      d.appendChild(document.createTextNode(ch.title));
+      d.appendChild(document.createTextNode(safeConvertText(chapterTitle(ch, i), mode)));
       d.addEventListener('click', function () { scrollToChapter(i); $('sidebar').classList.remove('open'); });
       sb.appendChild(d);
     });
-    sb.classList.remove('open'); // 默认不打开目录，点「☰ 目录」再展开
+    // 打开书时默认收起；简繁切换等刷新时保持原展开状态
+    if (keepOpen && wasOpen) sb.classList.add('open');
+    else sb.classList.remove('open');
   }
 
-  /* ---------- 进度 ---------- */
+  /* ---------- 进度（按文件指纹存取，书名相同/改名都不串） ---------- */
   function progressKey() {
-    return STORAGE_KEYS.progressPrefix + (book ? book.title : '');
+    return STORAGE_KEYS.progressPrefix + (book && book.id ? book.id : (book ? book.title : ''));
+  }
+  // 立即落盘：不防抖。页面隐藏/关闭前调用，避免丢掉防抖窗口内最后一段滚动位置
+  function writeProgressNow() {
+    if (!book || !rememberScroll) return; // 关闭记忆时不写
+    if (chapterOffsetsDirty) rebuildChapterOffsets();
+    var offset = Math.max(0, $('content-wrap').scrollTop);
+    // 实时算当前章，不信任缓存的 curIdx——pagehide 时滚动刚发生，curIdx 可能还没被滚动 rAF 更新
+    var chapter = Math.max(0, currentChapterIndex());
+    var base = (chapterOffsets && chapterOffsets[chapter] != null) ? chapterOffsets[chapter] : 0;
+    store.set(progressKey(), JSON.stringify({
+      offset: offset,
+      chapter: chapter,
+      delta: Math.max(0, offset - base), // 章内偏移：换字号后仍能回到同一段
+      title: book.title,
+      at: Date.now()
+    }));
   }
   function saveProgress() {
     if (!book || !rememberScroll) return; // 关闭记忆时本次阅读不保存进度
-    var scroll = $('content-wrap').scrollTop;
     // 防抖：滚动过程中不重复写 localStorage，停止 300ms 后才保存一次（高频滚动不再每帧写）
     clearTimeout(progressTimer);
-    progressTimer = setTimeout(function () {
-      store.set(progressKey(), JSON.stringify({ offset: scroll }));
-    }, 300);
+    progressTimer = setTimeout(writeProgressNow, 300);
   }
   function readProgress() {
-    try { return JSON.parse(store.get(progressKey(), 'null')); } catch (e) { return null; }
+    var p;
+    try { p = JSON.parse(store.get(progressKey(), 'null')); } catch (e) { return null; }
+    if (!p || typeof p !== 'object') return null;
+    var offset = parseFloat(p.offset);
+    if (!isFinite(offset) || offset < 0) return null;
+    var chapter = parseInt(p.chapter, 10);
+    var delta = parseFloat(p.delta);
+    return {
+      offset: offset,
+      chapter: (isFinite(chapter) && chapter >= 0) ? chapter : undefined,
+      delta: (isFinite(delta) && delta >= 0) ? delta : undefined
+    };
+  }
+
+  // 文件指纹：大小 + 修改时间 + 首尾 4KB FNV-1a。改名不丢进度，同名不同书也不串
+  function computeBookId(file) {
+    function hashBytes(u8, h) {
+      for (var i = 0; i < u8.length; i++) {
+        h ^= u8[i];
+        h = Math.imul(h, 0x01000193);
+      }
+      return h >>> 0;
+    }
+    var head = file.slice(0, 4096).arrayBuffer();
+    var tail = file.size > 4096
+      ? file.slice(Math.max(0, file.size - 4096)).arrayBuffer()
+      : Promise.resolve(new ArrayBuffer(0));
+    return Promise.all([head, tail]).then(function (bufs) {
+      var h = 0x811c9dc5;
+      h = hashBytes(new Uint8Array(bufs[0]), h);
+      h = hashBytes(new Uint8Array(bufs[1]), h);
+      return 'f' + file.size.toString(36) + '-' + (file.lastModified || 0).toString(36) + '-' + h.toString(36);
+    }).catch(function () {
+      return 'f' + file.size + '-' + (file.lastModified || 0);
+    });
   }
 
   /* ---------- 自动滚屏（双击正文，requestAnimationFrame 逐帧平滑滚动） ---------- */
@@ -1496,19 +2053,23 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
   function autoScrollStart() {
     var wrap = $('content-wrap');
     if (!book || !wrap) return;
-    if (wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 2) { toast('已到文末'); return; }
+    if (wrap.scrollTop + wrap.clientHeight >= wrap.scrollHeight - 2 && !renderInProgress) { toast('已到文末'); return; }
     autoScrollStop();
-    var speed = Settings.load().auto_scroll_speed || 5;
     autoScrollLast = 0;
     function step(ts) {
       if (!autoScrollRaf) return;
       if (!autoScrollLast) autoScrollLast = ts;
-      var dt = (ts - autoScrollLast) / 1000; // 距上一帧的秒数
+      // 切后台再回来时 ts 跨度可能很大，夹住避免瞬移
+      var dt = Math.min(0.1, Math.max(0, (ts - autoScrollLast) / 1000));
       autoScrollLast = ts;
       var w = $('content-wrap');
       if (!w) { autoScrollStop(); return; }
-      if (w.scrollTop + w.clientHeight >= w.scrollHeight - 2) { autoScrollStop(); toast('已滚到文末，自动停止'); return; }
-      w.scrollTop += speed * dt; // 按实际帧间隔推进，约 speed px/s，平滑无顿挫
+      if (w.scrollTop + w.clientHeight >= w.scrollHeight - 2) {
+        // 后台渐进渲染还没补齐：停在文末等新内容，补完后自动继续
+        if (renderInProgress) { autoScrollRaf = requestAnimationFrame(step); return; }
+        autoScrollStop(); toast('已滚到文末，自动停止'); return;
+      }
+      w.scrollTop += autoScrollSpeed * dt; // 每帧读缓存速度：拖动滑块即时生效
       autoScrollRaf = requestAnimationFrame(step);
     }
     autoScrollRaf = requestAnimationFrame(step);
@@ -1524,52 +2085,61 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
   }
 
   /* ---------- 打开书 ---------- */
+  var openSeq = 0;
   function openBook(file) {
     if (!file) return;
     autoScrollStop(); // 切换书前停止自动滚屏，避免旧 rAF 在新书正文上继续运行（稳定性）
+    clearTimeout(progressTimer); // 旧书还没落盘的滚动进度不要再写
     // 开始解析：立即隐藏占位提示，加载期间不再显示「打开本地小说…」
     $('empty').style.display = 'none';
     var name = file.name || '';
     var lower = name.toLowerCase();
     var fmt = 'txt';
+    var fileId = '';
+    var seq = ++openSeq;
     var onDone = function (b) {
+      if (seq !== openSeq) return; // 已打开更新的文件，丢弃旧解析结果
       book = b;
       book.format = fmt;
+      book.id = fileId;
+      book.textConvert = loadBookConvert(book.id);
       if (!book.title) book.title = name.replace(/\.(txt|epub)$/i, '');
       buildToc();
       renderWholeBook();
       updateHeaderPos();
       saveProgress();
-      writeLog('info', '打开书籍《' + book.title + '》 (' + fmt + ')');
       toast('已打开《' + book.title + '》');
     };
     var onErr = function (msg) {
+      if (seq !== openSeq) return;
       hideReadingArea();
-      // 记录具体文件信息，便于按文件复现
-      var fileMeta = name + ' (' + (file.size || '?') + ' bytes, type=' + (file.type || 'unknown') + ')';
-      writeLog('error', '打开失败 [' + fmt + ']: ' + msg + ' | 文件: ' + fileMeta);
       toast('打开失败：' + msg);
     };
 
-    if (lower.indexOf('.epub') > -1 || file.type.indexOf('epub') > -1) {
-      fmt = 'epub';
-      loadEpub(file, onDone, onErr);
-    } else if (/\.(md|markdown)$/.test(lower)) {
-      fmt = 'md';
-      loadMarkdown(file, onDone, onErr);
-    } else if (/\.(html|htm)$/.test(lower)) {
-      fmt = 'html';
-      loadHtml(file, onDone, onErr);
-    } else if (/\.zip$/.test(lower)) {
-      fmt = 'zip';
-      loadZip(file, onDone, onErr);
-    } else {
-      fmt = 'txt';
-      file.arrayBuffer().then(function (buf) {
-        var text = decodeTxt(new Uint8Array(buf));
-        onDone({ title: name.replace(/\.(txt|epub)$/i, ''), chapters: splitTxt(text) });
-      }).catch(function () { onErr('读取文件失败'); });
-    }
+    computeBookId(file).then(function (id) {
+      if (seq !== openSeq) return;
+      fileId = id;
+      // 只看真实扩展名：文件名里含 .epub 的 txt（如 全集.epub.txt）不能被当成 EPUB
+      if (/\.epub$/.test(lower) || file.type.indexOf('epub') > -1) {
+        fmt = 'epub';
+        loadEpub(file, onDone, onErr);
+      } else if (/\.(md|markdown)$/.test(lower)) {
+        fmt = 'md';
+        loadMarkdown(file, onDone, onErr);
+      } else if (/\.(html|htm)$/.test(lower)) {
+        fmt = 'html';
+        loadHtml(file, onDone, onErr);
+      } else if (/\.zip$/.test(lower)) {
+        fmt = 'zip';
+        loadZip(file, onDone, onErr);
+      } else {
+        fmt = 'txt';
+        file.arrayBuffer().then(function (buf) {
+          var text = decodeTxt(new Uint8Array(buf));
+          onDone({ title: name.replace(/\.(txt|epub)$/i, ''), chapters: splitTxt(text) });
+        }).catch(function () { onErr('读取文件失败'); });
+      }
+    });
   }
   /* ---------- 提示 ---------- */
   var toastTimer = null;
@@ -1584,31 +2154,36 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
   /* ---------- 设置导出 / 导入 ---------- */
   function exportSettings() {
     var s = Settings.load();
-    // 收集所有书的阅读进度
-    var progress = {};
+    // 收集所有书的阅读进度与简繁状态
+    var progress = {}, converts = {};
     for (var i = 0; i < localStorage.length; i++) {
       var k = localStorage.key(i);
       if (k && k.indexOf(STORAGE_KEYS.progressPrefix) === 0) {
         var title = k.slice(STORAGE_KEYS.progressPrefix.length);
         try { progress[title] = JSON.parse(localStorage.getItem(k) || '{}'); } catch (e) { progress[title] = {}; }
+      } else if (k && k.indexOf(STORAGE_KEYS.convertPrefix) === 0) {
+        var cid = k.slice(STORAGE_KEYS.convertPrefix.length);
+        converts[cid] = normalizeConvertMode(localStorage.getItem(k));
       }
     }
     var data = {
       app: '本地小说阅读器',
+      version: APP_VERSION,
       exportedAt: new Date().toISOString(),
       settings: s,
-      progress: progress
+      progress: progress,
+      converts: converts
     };
     var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
-    a.download = '本地小说阅读器设置.json';
+    a.download = '本地小说阅读器数据.json';
     document.body.appendChild(a);
     a.click();
     a.remove();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 1500);
-    toast('已导出设置+进度，请保存到 html 同目录');
+    setTimeout(function () { URL.revokeObjectURL(url); }, 10000);
+    toast('已导出数据（设置+阅读进度）');
   }
 
   function importSettings(file) {
@@ -1617,26 +2192,41 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
       try {
         var data = JSON.parse(text);
         var s = data && data.settings ? data.settings : data;
-        if (!s || typeof s !== 'object') throw new Error('文件格式不正确');
-        var clean = Settings.load();
-        var keys = ['skin', 'font_family', 'font_size', 'line_height', 'para_space', 'content_width',
-                    'purify_text', 'text_convert', 'remember_scroll', 'auto_scroll_speed'];
-        keys.forEach(function (k) {
-          // 旧版备份缺失的新字段：回退默认值，避免残留旧状态
-          clean[k] = (s[k] !== undefined) ? s[k] : DEFAULT_SETTINGS[k];
-        });
+        if (!s || typeof s !== 'object' || Array.isArray(s)) throw new Error('文件格式不正确');
+        // 所有字段统一校验/夹取，坏备份也能安全导入
+        var clean = normalizeSettings(s);
         Settings.save(clean);
-        // 恢复所有书的阅读进度
-        if (data.progress && typeof data.progress === 'object') {
+        // 恢复所有书的阅读进度（新键为文件指纹，旧备份的书名键也照常接收）
+        if (data.progress && typeof data.progress === 'object' && !Array.isArray(data.progress)) {
           Object.keys(data.progress).forEach(function (title) {
-            if (data.progress[title] && typeof data.progress[title] === 'object') {
-              store.set(STORAGE_KEYS.progressPrefix + title, JSON.stringify(data.progress[title]));
-            }
+            var p = data.progress[title];
+            if (!p || typeof p !== 'object') return;
+            var offset = parseFloat(p.offset);
+            if (!isFinite(offset) || offset < 0) offset = 0;
+            var chapter = parseInt(p.chapter, 10);
+            var val = { offset: offset };
+            if (isFinite(chapter) && chapter >= 0) val.chapter = chapter;
+            var delta = parseFloat(p.delta);
+            if (isFinite(delta) && delta >= 0) val.delta = delta;
+            if (typeof p.title === 'string') val.title = p.title;
+            store.set(STORAGE_KEYS.progressPrefix + title, JSON.stringify(val));
+          });
+        }
+        // 恢复每本书的简繁状态
+        if (data.converts && typeof data.converts === 'object' && !Array.isArray(data.converts)) {
+          Object.keys(data.converts).forEach(function (id) {
+            store.set(STORAGE_KEYS.convertPrefix + id, normalizeConvertMode(data.converts[id]));
           });
         }
         applySettings();
-        if (book) { rerenderKeepScroll(); saveProgress(); }
-        toast('已导入设置+进度并生效');
+        if (book) {
+          book.textConvert = loadBookConvert(book.id);
+          buildToc(true);
+          rerenderKeepScroll();
+          updateTocHighlight();
+          if ($('sidebar').classList.contains('open')) focusTocCurrent();
+        }
+        toast('已导入数据（设置+阅读进度）并生效');
       } catch (e) {
         toast('导入失败：' + e.message);
       }
@@ -1647,6 +2237,9 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
   function init() {
     // 系统检测：Windows 下切到近似 macOS 观感的字体栈（Segoe UI + 微软雅黑）
     document.body.classList.add(isMac ? 'os-mac' : 'os-win');
+    // 版本号：单一来源 APP_VERSION，顶栏与设置面板同步填充
+    $('app-version').textContent = APP_VERSION;
+    $('app-version-line').textContent = APP_VERSION;
     // 皮肤圆点
     var dots = $('skin-dots');
     SKINS.forEach(function (sk) {
@@ -1655,7 +2248,16 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
       d.dataset.key = sk.key;
       var sw = document.createElement('div');
       sw.className = 'sw';
-      sw.style.background = sk.bg; sw.style.color = sk.fg; sw.textContent = 'Aa';
+      if (sk.key === 'auto') {
+        // 自动跟随系统：预览用左浅右深两半表示
+        sw.classList.add('sw-auto');
+        var swTxt = document.createElement('span');
+        swTxt.className = 'sw-auto-txt';
+        swTxt.textContent = 'Aa';
+        sw.appendChild(swTxt);
+      } else {
+        sw.style.background = sk.bg; sw.style.color = sk.fg; sw.textContent = 'Aa';
+      }
       var nm = document.createElement('div');
       nm.className = 'nm'; nm.textContent = sk.name;
       d.appendChild(sw); d.appendChild(nm);
@@ -1663,44 +2265,49 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
       d.addEventListener('click', function () {
         var s = Settings.load(); s.skin = sk.key; Settings.save(s); applySettings();
         saveProgress();
-        writeLog('info', '切换皮肤为「' + sk.name + '」');
       });
       dots.appendChild(d);
     });
 
-    // 统一滑块绑定：apply 提供则写设置并重绘；缺省（如滚动速度）只更新显示，不做整面板重绘
-    function bindRange(id, valId, unit, apply) {
+    // 统一滑块绑定：layout=true 表示会改变正文布局，需要保持当前章位置
+    function bindRange(id, valId, unit, apply, layout) {
       $(id).addEventListener('input', function () {
         var s = Settings.load();
         if (apply) apply(s, parseFloat(this.value));
         Settings.save(s);
         $(valId).textContent = parseFloat(this.value) + unit;
         updateRangeFill(this);
-        if (apply) applySettings();
+        if (apply) applySettings(!!layout);
       });
     }
-    bindRange('font-size', 'font-size-val', 'px', function (s, v) { s.font_size = v; });
-    bindRange('line-height', 'line-height-val', '', function (s, v) { s.line_height = v; });
-    bindRange('para-space', 'para-space-val', 'em', function (s, v) { s.para_space = v; });
-    bindRange('content-width', 'content-width-val', 'px', function (s, v) { s.content_width = v; });
+    bindRange('font-size', 'font-size-val', 'px', function (s, v) { s.font_size = v; }, true);
+    bindRange('line-height', 'line-height-val', '', function (s, v) { s.line_height = v; }, true);
+    bindRange('para-space', 'para-space-val', 'em', function (s, v) { s.para_space = v; }, true);
+    bindRange('content-width', 'content-width-val', 'px', function (s, v) { s.content_width = v; }, true);
     bindRange('auto-scroll-speed', 'auto-scroll-speed-val', 'px/s', function (s, v) { s.auto_scroll_speed = v; });
     $('font-family').addEventListener('change', function () {
-      var s = Settings.load(); s.font_family = this.value; Settings.save(s); applySettings(); saveProgress();
+      var s = Settings.load(); s.font_family = this.value; Settings.save(s); applySettings(true); saveProgress();
     });
     if (typeof convertText === 'function') {
       $('btn-convert').addEventListener('click', function () {
         if (!book) { toast('请先打开小说再切换简繁'); return; }
-        var s = Settings.load();
-        var raw = book.chapters.map(function (ch) { return ch.paras.join('\n'); }).join('\n\n');
-        // 检测当前显示内容（已转换则基于转换后的文本判断）
-        var shown = s.text_convert === 'raw' ? raw : convertText(raw, s.text_convert);
-        var script = detectScript(shown);
+        var mode = bookConvertMode();
+        // 只对原文检测一次语种（不为了检测把整本书转一遍）
+        var script = detectScript(bookPlainText());
         if (!script) { toast('当前小说内容过少，无法判断简繁体'); return; }
-        s.text_convert = (script === 'zh-CN') ? 'zh-TW' : 'zh-CN';
-        Settings.save(s); applySettings();
-        rerenderKeepScroll(); saveProgress();
-        writeLog('info', script === 'zh-CN' ? '检测为简体，已转为繁体' : '检测为繁体，已转为简体');
-        toast(script === 'zh-CN' ? '检测为简体，已转换为繁体' : '检测为繁体，已转换为简体');
+        // raw 状态看原文语种决定方向；已转换过就按当前状态直接反向，与原先的翻来翻去一致
+        var next = (mode === 'raw')
+          ? (script === 'zh-CN' ? 'zh-TW' : 'zh-CN')
+          : (mode === 'zh-TW' ? 'zh-CN' : 'zh-TW');
+        book.textConvert = next;
+        saveBookConvert();
+        applyConvertToRendered(); // 就地替换文本，不重建 DOM
+        buildToc(true); // 目录标题跟着简繁一起变，保持展开状态
+        updateTocHighlight();
+        if ($('sidebar').classList.contains('open')) focusTocCurrent();
+        updateHeaderPos();
+        saveProgress();
+        toast(next === 'zh-TW' ? '已切换为繁体显示' : '已切换为简体显示');
       });
     } else {
       // 简繁转换库(zh-convert.js)未加载 → 隐藏转换按钮（可选插件降级）
@@ -1735,9 +2342,12 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
     // 键盘
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') {
+        if ($('encode-mask').classList.contains('open')) { $('encode-mask').classList.remove('open'); return; }
         if ($('settings-mask').classList.contains('open')) { $('settings-mask').classList.remove('open'); saveProgress(); }
         return;
       }
+      // 编码弹窗打开时不再响应 O/C/方向键，避免操作到背后的正文
+      if ($('encode-mask').classList.contains('open')) return;
       var _t = e.target;
       var _inF = _t && (_t.tagName === 'INPUT' || _t.tagName === 'TEXTAREA' || _t.tagName === 'SELECT' || _t.isContentEditable);
       if (!_inF && (e.key === 'o' || e.key === 'O')) { $('settings-mask').classList.toggle('open'); return; }
@@ -1759,11 +2369,13 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
         if (sp.scrollHeight > sp.clientHeight) { e.preventDefault(); sp.scrollTop += e.deltaY; }
         return;
       }
+      // 编码弹窗打开：滚轮只作用于弹窗，不再穿透到背后正文
+      if ($('encode-mask').classList.contains('open')) return;
       // 侧边栏开着且指针在侧边栏内：滚侧边栏
       var sb = $('sidebar');
       if (sb.classList.contains('open') && sb.contains(t)) return;
       // 指针在正文滚动容器内：交给浏览器默认滚动
-      if (t.closest && t.closest('#content-wrap') === wrap) return;
+      if (t && t.closest && t.closest('#content-wrap') === wrap) return;
       // 其余情况：转发给正文
       if (wrap.scrollHeight > wrap.clientHeight) {
         e.preventDefault();
@@ -1788,14 +2400,20 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
     // 数据管理：恢复默认 / 导出 / 导入
     $('btn-reset-settings').addEventListener('click', function () {
       Settings.reset(); applySettings();
-      if (book) { rerenderKeepScroll(); saveProgress(); }
-      writeLog('info', '恢复默认设置');
-      toast('已恢复默认设置（进度保留）');
+      if (book) {
+        // 恢复默认同时清掉本书的简繁显示状态，回到原文
+        book.textConvert = 'raw';
+        saveBookConvert();
+        buildToc(true);
+        rerenderKeepScroll();
+        updateTocHighlight();
+        if ($('sidebar').classList.contains('open')) focusTocCurrent();
+      }
+      toast('已恢复默认设置与原文显示（进度保留）');
     });
     $('btn-export-settings').addEventListener('click', exportSettings);
     $('btn-import-settings').addEventListener('click', function () { $('import-file').click(); });
     $('import-file').addEventListener('change', function () { importSettings(this.files[0]); this.value = ''; });
-    $('btn-export-logs').addEventListener('click', exportLogs);
 
     // 拖拽导入
     var dragDepth = 0;
@@ -1838,6 +2456,19 @@ input[type=checkbox]:checked::before { transform: translateX(17px); }
       rememberScroll = this.checked; // 同步缓存开关
     });
 
+    // 窗口尺寸/字体变化会改变章节高度，重算偏移保证目录高亮和进度准确
+    window.addEventListener('resize', scheduleRemeasure);
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(function () { if (book) scheduleRemeasure(); });
+    }
+
+    // 页面隐藏/关闭时立即落盘：防抖窗口内最后一段滚动位置不再丢
+    // 三个事件各覆盖一面：切后台/锁屏(visibilitychange)、刷新跳转(pagehide)、关窗口(beforeunload)
+    window.addEventListener('pagehide', writeProgressNow);
+    window.addEventListener('beforeunload', writeProgressNow);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'hidden') writeProgressNow();
+    });
 
     // 初始化设置
     applySettings();
